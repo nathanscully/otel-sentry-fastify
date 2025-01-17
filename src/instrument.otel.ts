@@ -73,8 +73,10 @@ const sdk = new NodeSDK({
       },
     }),
   ],
+  //@ts-ignore
   spanProcessors: [new BatchSpanProcessor(exporter)],
   resource: resource,
+  //@ts-ignore
   metricReader: metricReader,
 });
 

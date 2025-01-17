@@ -83,11 +83,13 @@ const sdk = new NodeSDK({
       },
     }),
   ],
+  //@ts-ignore
   spanProcessors: [new BatchSpanProcessor(exporter), new SentrySpanProcessor()],
   contextManager: new Sentry.SentryContextManager(),
   resource: resource,
   sampler: sampler,
   textMapPropagator: new SentryPropagator(),
+  //@ts-ignore
   metricReader: metricReader,
 });
 
