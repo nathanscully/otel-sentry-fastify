@@ -1,17 +1,16 @@
-import { metrics } from "@opentelemetry/api";
+import * as os from "node:os";
+import { DiagConsoleLogger, DiagLogLevel, diag } from "@opentelemetry/api";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { Resource } from "@opentelemetry/resources";
 import {
-  ConsoleMetricExporter,
-  MeterProvider,
+  InMemoryMetricExporter,
   PeriodicExportingMetricReader,
 } from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
   AlwaysOnSampler,
   BatchSpanProcessor,
+  InMemorySpanExporter,
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
 } from "@opentelemetry/sdk-trace-node";
@@ -27,72 +26,79 @@ import {
   SentrySampler,
   SentrySpanProcessor,
 } from "@sentry/opentelemetry";
+import { config } from "dotenv";
 
-const SAMPLE_RATE = 1.0;
+config();
+diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 
-const resource = new Resource({
-  [ATTR_SERVICE_NAME]: "test",
-  [ATTR_SERVICE_NAMESPACE]: "test",
-  [ATTR_SERVICE_VERSION]: 1,
-  [ATTR_SERVICE_INSTANCE_ID]: "localhost",
-});
+process.env.OTEL_NODE_ENABLED_INSTRUMENTATIONS =
+  "fastify,http,ioredis,pg,pino,fs,redis";
+
+const VERSION = process.env.VERSION || "unknown";
+const HOSTNAME = process.env.HOSTNAME || os.hostname() || "unknown";
+const ENV =
+  process.env.DEPLOYMENT_ENVIRONMENT || process.env.NODE_ENV || "development";
 
 const sentryClient = Sentry.init({
-  dsn: "https://3e7a18d13594e7cab4a944170ce5950e:71a03e3089854b895ca412749672ca45@o4506385527406592.ingest.us.sentry.io/4506386201313280",
-  skipOpenTelemetrySetup: true,
-  tracesSampleRate: SAMPLE_RATE,
+  dsn: process.env.SENTRY_DSN,
+  environment: ENV,
+  serverName: HOSTNAME,
   debug: true,
-  registerEsmLoaderHooks: true,
+  release: VERSION,
+  attachStacktrace: true,
+  skipOpenTelemetrySetup: true,
+  integrations: [Sentry.httpIntegration({ spans: false })],
+  tracesSampleRate: 1.0,
 });
 
+const resource = new Resource({
+  [ATTR_SERVICE_NAME]: "server",
+  [ATTR_SERVICE_NAMESPACE]: "adora",
+  [ATTR_SERVICE_VERSION]: VERSION,
+  [ATTR_SERVICE_INSTANCE_ID]: HOSTNAME,
+});
+// const sentryClient = undefined;
 const sampler = sentryClient
   ? new SentrySampler(sentryClient)
   : process.env.NODE_ENV === "development"
     ? new AlwaysOnSampler()
     : new ParentBasedSampler({
-        root: new TraceIdRatioBasedSampler(SAMPLE_RATE),
+        root: new TraceIdRatioBasedSampler(1),
       });
 
 const metricReader = new PeriodicExportingMetricReader({
-  exportIntervalMillis: 10000,
-  exporter: new OTLPMetricExporter(),
+  exporter: new InMemoryMetricExporter(0),
 });
-const exporter = new OTLPTraceExporter();
+export const traceExporter = new InMemorySpanExporter();
+
 const sdk = new NodeSDK({
-  traceExporter: exporter,
+  traceExporter: traceExporter,
   instrumentations: [
     getNodeAutoInstrumentations({
       "@opentelemetry/instrumentation-fs": {
         requireParentSpan: true,
       },
-      "@opentelemetry/instrumentation-net": {
-        enabled: false, // seems to send a lot of noise to otel spans due to pinging sentry constantly.
-      },
-      "@opentelemetry/instrumentation-dns": {
-        enabled: false, // seems to send a lot of noise to otel spans due to pinging sentry constantly.
-      },
       "@opentelemetry/instrumentation-pg": {
         requireParentSpan: true,
       },
-      "@opentelemetry/instrumentation-fastify": {
-        enabled: true,
-      },
       "@opentelemetry/instrumentation-http": {
-        enabled: true,
         requireParentforOutgoingSpans: true,
       },
     }),
   ],
-  //@ts-ignore
-  spanProcessors: [new BatchSpanProcessor(exporter), new SentrySpanProcessor()],
+  spanProcessors: [
+    new BatchSpanProcessor(traceExporter, {
+      maxExportBatchSize: 20480,
+      scheduledDelayMillis: 1000,
+      maxQueueSize: 40960,
+    }),
+    new SentrySpanProcessor(),
+  ],
   contextManager: new Sentry.SentryContextManager(),
   resource: resource,
   sampler: sampler,
   textMapPropagator: new SentryPropagator(),
-  //@ts-ignore
   metricReader: metricReader,
 });
-
 sdk.start();
-
 Sentry.validateOpenTelemetrySetup();

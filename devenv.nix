@@ -16,5 +16,6 @@
     pnpm = {
       enable = true;
     };
+    package = pkgs.nodejs_22;
   };
 }
