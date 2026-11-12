@@ -11,7 +11,6 @@ import {
 } from "@sentry/opentelemetry";
 
 const sentryClient = Sentry.init({
-  dsn: "https://3e7a18d13594e7cab4a944170ce5950e:71a03e3089854b895ca412749672ca45@o4506385527406592.ingest.us.sentry.io/4506386201313280",
   skipOpenTelemetrySetup: true,
   tracesSampleRate: 1.0,
   debug: true,

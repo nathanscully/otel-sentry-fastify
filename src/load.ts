@@ -1,8 +1,8 @@
 import http from 'k6/http';
 
 export const options = {
-  vus: 3, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
-  duration: '5s', // This can be shorter or just a few iterations
+  vus: 1, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
+  duration: '1s', // This can be shorter or just a few iterations
 };
 
 export default function () {

@@ -24,7 +24,6 @@ const resource = new Resource({
 });
 
 const sentryClient = Sentry.init({
-  dsn: "https://3e7a18d13594e7cab4a944170ce5950e:71a03e3089854b895ca412749672ca45@o4506385527406592.ingest.us.sentry.io/4506386201313280",
   skipOpenTelemetrySetup: true,
   tracesSampleRate: SAMPLE_RATE,
   debug: true,
@@ -47,27 +46,7 @@ const exporter = new OTLPTraceExporter();
 const sdk = new NodeSDK({
   traceExporter: exporter,
   instrumentations: [
-    getNodeAutoInstrumentations({
-      "@opentelemetry/instrumentation-fs": {
-        requireParentSpan: true,
-      },
-      "@opentelemetry/instrumentation-net": {
-        enabled: false, // seems to send a lot of noise to otel spans due to pinging sentry constantly.
-      },
-      "@opentelemetry/instrumentation-dns": {
-        enabled: false, // seems to send a lot of noise to otel spans due to pinging sentry constantly.
-      },
-      "@opentelemetry/instrumentation-pg": {
-        requireParentSpan: true,
-      },
-      "@opentelemetry/instrumentation-fastify": {
-        enabled: true,
-      },
-      "@opentelemetry/instrumentation-http": {
-        enabled: true,
-        requireParentforOutgoingSpans: true,
-      },
-    }),
+    getNodeAutoInstrumentations(),
   ],
   spanProcessors: [new BatchSpanProcessor(exporter), new SentrySpanProcessor()],
   contextManager: new Sentry.SentryContextManager(),
